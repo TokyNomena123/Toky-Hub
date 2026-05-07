@@ -1,13 +1,12 @@
+import os
+import uuid
 from fastapi import FastAPI, HTTPException
 from fastapi.responses import FileResponse
 from fastapi.middleware.cors import CORSMiddleware
 import yt_dlp
-import os
-import uuid
 
 app = FastAPI()
 
-# Mamela ny Lovable hifandray amin'ity server ity
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],
@@ -15,35 +14,44 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-DOWNLOAD_DIR = "downloads"
-if not os.path.exists(DOWNLOAD_DIR):
-    os.makedirs(DOWNLOAD_DIR)
-
 @app.get("/convert")
 async def convert_video(url: str):
     file_id = str(uuid.uuid4())
-    output_template = f"{DOWNLOAD_DIR}/{file_id}.%(ext)s"
+    output_path = f"/tmp/{file_id}"
     
     ydl_opts = {
         'format': 'bestaudio/best',
+        'outtmpl': f'{output_path}.%(ext)s',
         'postprocessors': [{
             'key': 'FFmpegExtractAudio',
             'preferredcodec': 'mp3',
             'preferredquality': '192',
         }],
-        'outtmpl': output_template,
+        'quiet': True,
+        'no_warnings': True,
+        'nocheckcertificate': True,
+        'addheader': [
+            'User-Agent: Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'
+        ],
     }
 
     try:
         with yt_dlp.YoutubeDL(ydl_opts) as ydl:
-            info = ydl.extract_info(url, download=True)
-            mp3_file = f"{DOWNLOAD_DIR}/{file_id}.mp3"
-            
-            # Mamerina ilay rakitra mp3 mivantana amin'ny browser
+            ydl.download([url])
+        
+        final_file = f"{output_path}.mp3"
+        if os.path.exists(final_file):
             return FileResponse(
-                path=mp3_file, 
-                filename=f"{info['title']}.mp3", 
-                media_type='audio/mpeg'
+                path=final_file, 
+                media_type='audio/mpeg', 
+                filename="music.mp3"
             )
+        else:
+            raise HTTPException(status_code=500, detail="File not found after conversion")
+            
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
+
+@app.get("/")
+def home():
+    return {"status": "running", "service": "Toky-Hub API"}
